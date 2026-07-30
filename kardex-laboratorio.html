@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Kardex de Laboratorio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#F7F8F7; --surface:#FFFFFF; --surface-alt:#EFF2F1;
+  --ink:#1B2B2B; --ink-muted:#5B6B69; --accent:#2F6F6B; --accent-soft:#E4EEEC;
+  --border:#D8DEDC;
+  --green:#3A8B4A; --green-soft:#E3F1E5;
+  --amber:#B8790C; --amber-soft:#FBF0DE;
+  --red:#C1442E; --red-soft:#F8E4DF;
+  --font-display:'Fraunces', serif; --font-body:'IBM Plex Sans', sans-serif; --font-mono:'IBM Plex Mono', monospace;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--font-body);}
+.app{max-width:1220px;margin:0 auto;padding:28px 24px 60px;}
+
+.label{display:flex;align-items:center;gap:18px;background:var(--surface);border:1.5px solid var(--ink);border-radius:6px 6px 2px 2px;padding:16px 20px;position:relative;margin-bottom:18px;}
+.label::before{content:"";position:absolute;left:14px;right:14px;bottom:8px;height:1px;background:repeating-linear-gradient(to right,var(--border) 0 6px,transparent 6px 10px);}
+.label-mark{width:44px;height:44px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--accent);}
+.label-text h1{font-family:var(--font-display);font-weight:700;font-size:26px;margin:0;letter-spacing:.2px;}
+.label-text p{margin:2px 0 0;font-family:var(--font-mono);font-size:11.5px;color:var(--ink-muted);letter-spacing:.6px;text-transform:uppercase;}
+.label-fields{margin-left:auto;display:flex;gap:22px;font-family:var(--font-mono);font-size:11px;color:var(--ink-muted);}
+.label-fields div span{display:block;color:var(--ink);font-size:13px;font-weight:600;}
+
+.banner{display:none;align-items:center;gap:12px;background:var(--red-soft);border:1px solid var(--red);color:var(--red);border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13.5px;}
+.banner.show{display:flex;}
+.banner b{font-weight:700;}
+.banner-actions{margin-left:auto;display:flex;gap:8px;flex-shrink:0;}
+.banner .btn{padding:6px 12px;font-size:12.5px;}
+
+.stats{display:flex;gap:12px;margin-bottom:20px;}
+.chip{flex:1;border-radius:8px;padding:12px 16px;border:1px solid var(--border);background:var(--surface);display:flex;align-items:center;gap:10px;}
+.chip .dot{width:12px;height:12px;border-radius:50%;flex-shrink:0;}
+.chip .n{font-family:var(--font-mono);font-size:20px;font-weight:600;}
+.chip .l{font-size:12px;color:var(--ink-muted);}
+.chip.green{background:var(--green-soft);} .chip.green .dot{background:var(--green);}
+.chip.amber{background:var(--amber-soft);} .chip.amber .dot{background:var(--amber);}
+.chip.red{background:var(--red-soft);} .chip.red .dot{background:var(--red);}
+
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center;}
+.toolbar input[type=text], .toolbar select{font-family:var(--font-body);font-size:13.5px;padding:9px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink);}
+.toolbar input[type=text]{flex:1;min-width:180px;}
+.check-label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--ink-muted);white-space:nowrap;}
+.btn{font-family:var(--font-body);font-weight:600;font-size:13.5px;padding:9px 16px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer;}
+.btn.secondary{background:var(--surface);color:var(--accent);}
+.btn.ghost{background:transparent;color:var(--ink-muted);border-color:var(--border);}
+.btn.on-red{background:#fff;color:var(--red);border-color:var(--red);}
+.btn:hover{filter:brightness(0.95);}
+.btn:focus-visible, input:focus-visible, select:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+
+.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:13.5px;}
+thead th{text-align:left;font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-muted);padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface-alt);white-space:nowrap;}
+tbody td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tbody tr:last-child td{border-bottom:none;}
+tbody tr.status-red{border-left:5px solid var(--red);}
+tbody tr.status-amber{border-left:5px solid var(--amber);}
+tbody tr.status-green{border-left:5px solid var(--green);}
+tbody tr.inactive{opacity:.55;}
+.name-cell b{display:block;}
+.name-cell small{color:var(--ink-muted);font-family:var(--font-mono);font-size:11px;}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;background:var(--surface-alt);color:var(--ink-muted);font-family:var(--font-mono);}
+.tag.qc-ok{background:var(--green-soft);color:var(--green);}
+.tag.qc-bad{background:var(--red-soft);color:var(--red);}
+.tag.qc-pend{background:var(--amber-soft);color:var(--amber);}
+.tag.baja{background:var(--surface-alt);color:var(--ink-muted);}
+.mono{font-family:var(--font-mono);}
+.stock-bad{color:var(--red);font-weight:600;}
+.stock-warn{color:var(--amber);font-weight:600;}
+.row-actions{display:flex;gap:6px;}
+.icon-btn{border:1px solid var(--border);background:var(--surface);border-radius:5px;padding:5px 9px;cursor:pointer;font-size:12px;}
+.icon-btn:hover{background:var(--surface-alt);}
+.empty{padding:40px;text-align:center;color:var(--ink-muted);}
+
+.movs{margin-top:26px;}
+.movs summary{cursor:pointer;font-family:var(--font-mono);font-size:12.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-muted);padding:8px 0;}
+.movs table{margin-top:8px;}
+
+.overlay{position:fixed;inset:0;background:rgba(27,43,43,.35);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
+.modal{background:var(--surface);border-radius:10px;padding:24px;width:520px;max-width:94vw;max-height:88vh;overflow:auto;}
+.modal h2{font-family:var(--font-display);font-size:20px;margin:0 0 4px;}
+.modal .sub{font-size:12px;color:var(--ink-muted);margin-bottom:16px;}
+.section-title{font-family:var(--font-mono);font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent);margin:18px 0 8px;padding-top:12px;border-top:1px dashed var(--border);}
+.section-title:first-of-type{border-top:none;margin-top:0;padding-top:0;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:12px;color:var(--ink-muted);margin-bottom:4px;font-family:var(--font-mono);text-transform:uppercase;letter-spacing:.4px;}
+.field input, .field select, .field textarea{width:100%;padding:9px 10px;border:1px solid var(--border);border-radius:6px;font-family:var(--font-body);font-size:13.5px;background:var(--bg);}
+.field.row{display:flex;gap:10px;}
+.field.row > div{flex:1;}
+.modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px;}
+.helper{font-size:11.5px;color:var(--ink-muted);margin-top:4px;}
+
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 18px;}
+.detail-grid .full{grid-column:1/-1;}
+.detail-item label{display:block;font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--ink-muted);font-family:var(--font-mono);margin-bottom:2px;}
+.detail-item div{font-size:13.5px;}
+.detail-item a{color:var(--accent);}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;z-index:100;opacity:0;transition:opacity .25s;max-width:80vw;text-align:center;}
+.toast.show{opacity:1;}
+
+@media (max-width:720px){
+  .label-fields{display:none;}
+  .toolbar{flex-direction:column;align-items:stretch;}
+  table{font-size:12px;}
+  .detail-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="label">
+    <div class="label-mark">Ph</div>
+    <div class="label-text">
+      <h1>Kardex</h1>
+      <p>Control de insumos y reactivos</p>
+    </div>
+    <div class="label-fields">
+      <div><span id="fld-total">0</span>REF. ACTIVAS</div>
+      <div><span id="fld-fecha">--</span>FECHA</div>
+    </div>
+  </div>
+
+  <div class="banner" id="banner">
+    <span>⚠️ <b id="banner-count">0</b> insumo(s) requieren acción urgente (vencidos o bajo mínimo).</span>
+    <div class="banner-actions">
+      <button class="btn on-red" onclick="copySummary()">Copiar resumen</button>
+      <button class="btn on-red" onclick="emailSummary()">Enviar por correo</button>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="chip green"><div class="dot"></div><div><div class="n" id="cnt-green">0</div><div class="l">En orden</div></div></div>
+    <div class="chip amber"><div class="dot"></div><div><div class="n" id="cnt-amber">0</div><div class="l">Atención pronto</div></div></div>
+    <div class="chip red"><div class="dot"></div><div><div class="n" id="cnt-red">0</div><div class="l">Acción urgente</div></div></div>
+  </div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="Buscar por nombre, código, lote o proveedor…">
+    <select id="filter-cat"><option value="">Todas las categorías</option></select>
+    <select id="filter-status">
+      <option value="">Todos los estados</option>
+      <option value="red">🔴 Urgente</option>
+      <option value="amber">🟡 Atención</option>
+      <option value="green">🟢 En orden</option>
+    </select>
+    <label class="check-label"><input type="checkbox" id="filter-inactive"> Mostrar dados de baja</label>
+    <button class="btn secondary" id="btn-report">📋 Informe de auditoría</button>
+    <button class="btn secondary" id="btn-export">⬇ Excel</button>
+    <button class="btn secondary" id="btn-refresh" title="Recargar datos compartidos">↻</button>
+    <button class="btn" id="btn-new">+ Nuevo insumo</button>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th></th><th>Insumo / Reactivo</th><th>Categoría</th><th>Código interno</th>
+          <th>Vence</th><th>Stock</th><th>Ubicación</th><th>CC</th><th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty-msg" style="display:none;">Aún no hay insumos registrados. Crea el primero con "+ Nuevo insumo".</div>
+  </div>
+
+  <details class="movs">
+    <summary>Historial de movimientos recientes</summary>
+    <table>
+      <thead><tr><th>Fecha</th><th>Insumo</th><th>Tipo</th><th>Cantidad</th><th>Responsable</th><th>Motivo</th></tr></thead>
+      <tbody id="movs-tbody"></tbody>
+    </table>
+  </details>
+
+  <details class="movs">
+    <summary>Log de trazabilidad (auditoría interna)</summary>
+    <table>
+      <thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Insumo</th><th>Detalle</th></tr></thead>
+      <tbody id="audit-tbody"></tbody>
+    </table>
+  </details>
+
+</div>
+
+<div id="modal-root"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const STORAGE_KEY = 'kardex-items';
+const MOVS_KEY = 'kardex-movimientos';
+const AUDIT_KEY = 'kardex-auditoria';
+const CONFIG_KEY = 'kardex-config';
+let items = [];
+let movs = [];
+let audit = [];
+let config = { labName: '', preparedByDefault: '' };
+
+function todayISO(){ return new Date().toISOString().slice(0,10); }
+function nowStamp(){ return new Date().toISOString().slice(0,16).replace('T',' '); }
+function daysUntil(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  const t = new Date(todayISO() + 'T00:00:00');
+  return Math.round((d - t) / 86400000);
+}
+function uid(){ return 'i' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+function expiryStatus(dateStr){
+  if(!dateStr) return 'green';
+  const d = daysUntil(dateStr);
+  if(d <= 15) return 'red';
+  if(d <= 45) return 'amber';
+  return 'green';
+}
+function stockStatus(actual, minimo){
+  if(minimo <= 0) return 'green';
+  if(actual <= minimo) return 'red';
+  if(actual <= minimo * 1.5) return 'amber';
+  return 'green';
+}
+function worst(a,b){ const rank = {red:2, amber:1, green:0}; return rank[a] >= rank[b] ? a : b; }
+function overallStatus(item){ return worst(expiryStatus(item.vencimiento), stockStatus(item.stock, item.stockMin)); }
+
+async function loadData(){
+  try{ const r = await window.storage.get(STORAGE_KEY, true); items = r ? JSON.parse(r.value) : []; }catch(e){ items = []; }
+  try{ const r2 = await window.storage.get(MOVS_KEY, true); movs = r2 ? JSON.parse(r2.value) : []; }catch(e){ movs = []; }
+  try{ const r3 = await window.storage.get(AUDIT_KEY, true); audit = r3 ? JSON.parse(r3.value) : []; }catch(e){ audit = []; }
+  try{ const r4 = await window.storage.get(CONFIG_KEY, true); config = r4 ? JSON.parse(r4.value) : config; }catch(e){}
+  // migración: asegurar que items antiguos tengan 'activo'
+  items.forEach(i => { if(i.activo === undefined) i.activo = true; });
+  render();
+}
+async function saveItems(){ try{ await window.storage.set(STORAGE_KEY, JSON.stringify(items), true); }catch(e){ showToast('No se pudo guardar. Intenta de nuevo.'); } }
+async function saveMovs(){ try{ await window.storage.set(MOVS_KEY, JSON.stringify(movs), true); }catch(e){ showToast('No se pudo guardar el movimiento.'); } }
+async function saveAudit(){ try{ await window.storage.set(AUDIT_KEY, JSON.stringify(audit), true); }catch(e){ showToast('No se pudo guardar el log de auditoría.'); } }
+async function saveConfig(){ try{ await window.storage.set(CONFIG_KEY, JSON.stringify(config), true); }catch(e){} }
+
+function logAudit(usuario, accion, itemNombre, detalle){
+  audit.push({ fecha: nowStamp(), usuario: usuario || '(sin especificar)', accion, itemNombre, detalle: detalle || '' });
+  saveAudit();
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 2500);
+}
+
+function updateCategoryFilter(){
+  const sel = document.getElementById('filter-cat');
+  const current = sel.value;
+  const cats = [...new Set(items.map(i=>i.categoria).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Todas las categorías</option>' + cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  sel.value = cats.includes(current) ? current : '';
+}
+
+function qcLabel(qc){
+  if(qc === 'aprobado') return '<span class="tag qc-ok">Aprobado</span>';
+  if(qc === 'rechazado') return '<span class="tag qc-bad">Rechazado</span>';
+  return '<span class="tag qc-pend">Pendiente</span>';
+}
+
+function render(){
+  const activeItems = items.filter(i => i.activo);
+  document.getElementById('fld-total').textContent = activeItems.length;
+  document.getElementById('fld-fecha').textContent = todayISO();
+  updateCategoryFilter();
+
+  let counts = {red:0, amber:0, green:0};
+  activeItems.forEach(i => counts[overallStatus(i)]++);
+  document.getElementById('cnt-red').textContent = counts.red;
+  document.getElementById('cnt-amber').textContent = counts.amber;
+  document.getElementById('cnt-green').textContent = counts.green;
+
+  const banner = document.getElementById('banner');
+  if(counts.red > 0){ banner.classList.add('show'); document.getElementById('banner-count').textContent = counts.red; }
+  else { banner.classList.remove('show'); }
+
+  const search = document.getElementById('search').value.trim().toLowerCase();
+  const catF = document.getElementById('filter-cat').value;
+  const statusF = document.getElementById('filter-status').value;
+  const showInactive = document.getElementById('filter-inactive').checked;
+
+  let filtered = items.filter(i=>{
+    if(!showInactive && !i.activo) return false;
+    if(catF && i.categoria !== catF) return false;
+    if(statusF && i.activo && overallStatus(i) !== statusF) return false;
+    if(search){
+      const hay = [i.nombre,i.codigoInterno,i.loteProveedor,i.proveedor].join(' ').toLowerCase();
+      if(!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const rank = {red:0, amber:1, green:2};
+  filtered.sort((a,b)=>{
+    if(a.activo !== b.activo) return a.activo ? -1 : 1;
+    const ra = rank[overallStatus(a)], rb = rank[overallStatus(b)];
+    if(ra !== rb) return ra - rb;
+    return (a.vencimiento||'').localeCompare(b.vencimiento||'');
+  });
+
+  const tbody = document.getElementById('tbody');
+  const emptyMsg = document.getElementById('empty-msg');
+  if(filtered.length === 0){ tbody.innerHTML = ''; emptyMsg.style.display = 'block'; }
+  else { emptyMsg.style.display = 'none'; tbody.innerHTML = filtered.map(i => rowHTML(i)).join(''); }
+
+  renderMovs();
+  renderAudit();
+}
+
+function rowHTML(i){
+  const status = overallStatus(i);
+  const stkStatus = stockStatus(i.stock, i.stockMin);
+  const dot = i.activo ? {red:'🔴', amber:'🟡', green:'🟢'}[status] : '⚪';
+  const d = i.vencimiento ? daysUntil(i.vencimiento) : null;
+  let venceTxt = i.vencimiento ? i.vencimiento : '—';
+  if(d !== null){ venceTxt += ` <span class="mono" style="color:var(--ink-muted);font-size:11px;">(${d < 0 ? 'vencido '+Math.abs(d)+'d' : d+'d'})</span>`; }
+  const stockCls = stkStatus === 'red' ? 'stock-bad' : (stkStatus === 'amber' ? 'stock-warn' : '');
+  const rowCls = i.activo ? `status-${status}` : 'inactive';
+  const actions = i.activo ? `
+        <button class="icon-btn" onclick="openMovModal('${i.id}','entrada')" title="Entrada">↧</button>
+        <button class="icon-btn" onclick="openMovModal('${i.id}','salida')" title="Salida">↥</button>
+        <button class="icon-btn" onclick="openDetailModal('${i.id}')" title="Ver detalle">👁</button>
+        <button class="icon-btn" onclick="openItemModal('${i.id}')" title="Editar">✎</button>
+        <button class="icon-btn" onclick="openBajaModal('${i.id}')" title="Dar de baja">🗄</button>` : `
+        <button class="icon-btn" onclick="openDetailModal('${i.id}')" title="Ver detalle">👁</button>
+        <span class="tag baja">Baja: ${escapeHTML(i.fechaBaja||'')}</span>`;
+  return `
+  <tr class="${rowCls}">
+    <td style="text-align:center;">${dot}</td>
+    <td class="name-cell"><b>${escapeHTML(i.nombre)}</b><small>${escapeHTML(i.proveedor||'')}</small></td>
+    <td><span class="tag">${escapeHTML(i.categoria||'—')}</span></td>
+    <td class="mono">${escapeHTML(i.codigoInterno||'—')}</td>
+    <td class="mono">${venceTxt}</td>
+    <td class="mono ${stockCls}">${i.stock} / min ${i.stockMin} ${escapeHTML(i.unidad||'')}</td>
+    <td>${escapeHTML(i.ubicacion||'—')}</td>
+    <td>${qcLabel(i.controlCalidad)}</td>
+    <td><div class="row-actions">${actions}</div></td>
+  </tr>`;
+}
+
+function renderMovs(){
+  const tbody = document.getElementById('movs-tbody');
+  const recent = [...movs].sort((a,b)=> b.fecha.localeCompare(a.fecha)).slice(0,25);
+  tbody.innerHTML = recent.map(m=>{
+    const item = items.find(i=>i.id === m.itemId);
+    return `<tr>
+      <td class="mono">${m.fecha}</td>
+      <td>${escapeHTML(item ? item.nombre : '(eliminado)')}</td>
+      <td>${m.tipo === 'entrada' ? '↧ Entrada' : '↥ Salida'}</td>
+      <td class="mono">${m.cantidad}</td>
+      <td>${escapeHTML(m.responsable)}</td>
+      <td>${escapeHTML(m.motivo||'')}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="color:var(--ink-muted);text-align:center;">Sin movimientos aún.</td></tr>';
+}
+
+function renderAudit(){
+  const tbody = document.getElementById('audit-tbody');
+  const recent = [...audit].sort((a,b)=> b.fecha.localeCompare(a.fecha)).slice(0,50);
+  tbody.innerHTML = recent.map(a=>`<tr>
+      <td class="mono">${a.fecha}</td>
+      <td>${escapeHTML(a.usuario)}</td>
+      <td>${escapeHTML(a.accion)}</td>
+      <td>${escapeHTML(a.itemNombre)}</td>
+      <td>${escapeHTML(a.detalle)}</td>
+    </tr>`).join('') || '<tr><td colspan="5" style="color:var(--ink-muted);text-align:center;">Sin eventos registrados aún.</td></tr>';
+}
+
+function escapeHTML(s){
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ---------- modal: nuevo/editar insumo ---------- */
+function openItemModal(id){
+  const e = id ? items.find(i=>i.id===id) : null;
+  const g = (field, def='') => e ? (e[field] ?? def) : def;
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>${e ? 'Editar insumo' : 'Nuevo insumo'}</h2>
+      <div class="sub">Identificación</div>
+      <div class="field"><label>Nombre</label><input id="f-nombre" type="text" value="${escapeHTML(g('nombre'))}"></div>
+      <div class="field row">
+        <div><label>Categoría</label><input id="f-categoria" type="text" placeholder="Reactivo, medio de cultivo…" value="${escapeHTML(g('categoria'))}"></div>
+        <div><label>Código interno</label><input id="f-codint" type="text" value="${escapeHTML(g('codigoInterno'))}"></div>
+        <div><label>Lote del proveedor</label><input id="f-loteprov" type="text" value="${escapeHTML(g('loteProveedor'))}"></div>
+      </div>
+
+      <div class="section-title">Existencias y vencimiento</div>
+      <div class="field row">
+        <div><label>Stock actual</label><input id="f-stock" type="number" min="0" value="${g('stock',0)}"></div>
+        <div><label>Stock mínimo</label><input id="f-stockmin" type="number" min="0" value="${g('stockMin',0)}"></div>
+        <div><label>Unidad</label><input id="f-unidad" type="text" placeholder="mL, u, frascos…" value="${escapeHTML(g('unidad'))}"></div>
+      </div>
+      <div class="field row">
+        <div><label>Fecha de recepción</label><input id="f-recepcion" type="date" value="${g('fechaRecepcion')}"></div>
+        <div><label>Fecha de vencimiento</label><input id="f-vence" type="date" value="${g('vencimiento')}"></div>
+        <div><label>Fecha de apertura</label><input id="f-apertura" type="date" value="${g('fechaApertura')}"></div>
+      </div>
+
+      <div class="section-title">Almacenamiento y seguridad</div>
+      <div class="field row">
+        <div><label>Condiciones de almacenamiento</label><input id="f-almac" type="text" placeholder="Refrigeración 2-8°C, congelación -20°C…" value="${escapeHTML(g('almacenamiento'))}"></div>
+        <div><label>Ubicación física</label><input id="f-ubicacion" type="text" placeholder="Refrigerador 2, estante B…" value="${escapeHTML(g('ubicacion'))}"></div>
+      </div>
+      <div class="field"><label>Ficha de seguridad (SDS/MSDS) — enlace o referencia</label><input id="f-sds" type="text" placeholder="https:// o código de referencia interna" value="${escapeHTML(g('sds'))}"></div>
+
+      <div class="section-title">Trazabilidad y compras</div>
+      <div class="field row">
+        <div><label>Control de calidad al recibir</label>
+          <select id="f-cc">
+            <option value="pendiente" ${g('controlCalidad','pendiente')==='pendiente'?'selected':''}>Pendiente</option>
+            <option value="aprobado" ${g('controlCalidad')==='aprobado'?'selected':''}>Aprobado</option>
+            <option value="rechazado" ${g('controlCalidad')==='rechazado'?'selected':''}>Rechazado</option>
+          </select>
+        </div>
+        <div><label>Registro sanitario / INVIMA</label><input id="f-invima" type="text" value="${escapeHTML(g('registroSanitario'))}"></div>
+      </div>
+      <div class="field row">
+        <div><label>Proveedor</label><input id="f-proveedor" type="text" value="${escapeHTML(g('proveedor'))}"></div>
+        <div><label>Contacto del proveedor</label><input id="f-provcontacto" type="text" placeholder="Correo o teléfono" value="${escapeHTML(g('proveedorContacto'))}"></div>
+      </div>
+      <div class="field"><label>Orden de compra / referencia de pedido</label><input id="f-orden" type="text" value="${escapeHTML(g('ordenCompra'))}"></div>
+      <div class="field"><label>Registrado por (para trazabilidad)</label><input id="f-regpor" type="text" placeholder="Tu nombre" value="${escapeHTML(config.preparedByDefault||'')}"></div>
+
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn" onclick="saveItemForm('${e ? e.id : ''}')">Guardar</button>
+      </div>
+    </div>
+  </div>`;
+}
+function saveItemForm(id){
+  const nombre = document.getElementById('f-nombre').value.trim();
+  if(!nombre){ showToast('El nombre es obligatorio.'); return; }
+  const regPor = document.getElementById('f-regpor').value.trim();
+  if(!regPor){ showToast('Indica quién registra este cambio (trazabilidad).'); return; }
+  const data = {
+    nombre,
+    categoria: document.getElementById('f-categoria').value.trim(),
+    codigoInterno: document.getElementById('f-codint').value.trim(),
+    loteProveedor: document.getElementById('f-loteprov').value.trim(),
+    stock: Number(document.getElementById('f-stock').value) || 0,
+    stockMin: Number(document.getElementById('f-stockmin').value) || 0,
+    unidad: document.getElementById('f-unidad').value.trim(),
+    fechaRecepcion: document.getElementById('f-recepcion').value,
+    vencimiento: document.getElementById('f-vence').value,
+    fechaApertura: document.getElementById('f-apertura').value,
+    almacenamiento: document.getElementById('f-almac').value.trim(),
+    ubicacion: document.getElementById('f-ubicacion').value.trim(),
+    sds: document.getElementById('f-sds').value.trim(),
+    controlCalidad: document.getElementById('f-cc').value,
+    registroSanitario: document.getElementById('f-invima').value.trim(),
+    proveedor: document.getElementById('f-proveedor').value.trim(),
+    proveedorContacto: document.getElementById('f-provcontacto').value.trim(),
+    ordenCompra: document.getElementById('f-orden').value.trim(),
+    registradoPor: regPor,
+    activo: true,
+  };
+  config.preparedByDefault = regPor;
+  saveConfig();
+  if(id){
+    const idx = items.findIndex(i=>i.id===id);
+    items[idx] = {...items[idx], ...data};
+    logAudit(regPor, 'Edición', nombre, 'Datos del insumo actualizados');
+  } else {
+    items.push({id: uid(), ...data});
+    logAudit(regPor, 'Creación', nombre, 'Insumo registrado en el kardex');
+  }
+  saveItems();
+  closeModal();
+  render();
+  showToast('Insumo guardado.');
+}
+
+/* ---------- dar de baja (reemplaza eliminar) ---------- */
+function openBajaModal(id){
+  const i = items.find(x=>x.id===id);
+  if(!i) return;
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>Dar de baja — ${escapeHTML(i.nombre)}</h2>
+      <div class="helper" style="margin-bottom:10px;">El insumo dejará de contarse en el inventario activo, pero se conserva en el historial para trazabilidad y auditoría.</div>
+      <div class="field"><label>Motivo</label><input id="b-motivo" type="text" placeholder="Vencido y descartado, devuelto al proveedor, agotado definitivamente…"></div>
+      <div class="field"><label>Responsable</label><input id="b-responsable" type="text" value="${escapeHTML(config.preparedByDefault||'')}"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn" onclick="confirmBaja('${id}')">Dar de baja</button>
+      </div>
+    </div>
+  </div>`;
+}
+function confirmBaja(id){
+  const motivo = document.getElementById('b-motivo').value.trim();
+  const responsable = document.getElementById('b-responsable').value.trim();
+  if(!responsable){ showToast('Indica el responsable.'); return; }
+  const idx = items.findIndex(i=>i.id===id);
+  if(idx === -1) return;
+  items[idx].activo = false;
+  items[idx].fechaBaja = todayISO();
+  items[idx].motivoBaja = motivo;
+  items[idx].bajaPor = responsable;
+  logAudit(responsable, 'Baja', items[idx].nombre, motivo || '(sin motivo especificado)');
+  saveItems();
+  closeModal();
+  render();
+  showToast('Insumo dado de baja. Sigue disponible en el historial.');
+}
+
+/* ---------- modal: detalle (solo lectura) ---------- */
+function openDetailModal(id){
+  const i = items.find(x=>x.id===id);
+  if(!i) return;
+  const sdsLink = i.sds ? (i.sds.startsWith('http') ? `<a href="${escapeHTML(i.sds)}" target="_blank" rel="noopener">${escapeHTML(i.sds)}</a>` : escapeHTML(i.sds)) : '—';
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>${escapeHTML(i.nombre)}</h2>
+      <div class="sub">${escapeHTML(i.categoria||'Sin categoría')} ${i.activo ? '' : ' — DADO DE BAJA el '+escapeHTML(i.fechaBaja||'')}</div>
+      <div class="detail-grid">
+        <div class="detail-item"><label>Código interno</label><div>${escapeHTML(i.codigoInterno||'—')}</div></div>
+        <div class="detail-item"><label>Lote del proveedor</label><div>${escapeHTML(i.loteProveedor||'—')}</div></div>
+        <div class="detail-item"><label>Fecha de recepción</label><div>${i.fechaRecepcion||'—'}</div></div>
+        <div class="detail-item"><label>Stock</label><div>${i.stock} / mín ${i.stockMin} ${escapeHTML(i.unidad||'')}</div></div>
+        <div class="detail-item"><label>Vence</label><div>${i.vencimiento||'—'}</div></div>
+        <div class="detail-item"><label>Fecha de apertura</label><div>${i.fechaApertura||'—'}</div></div>
+        <div class="detail-item"><label>Almacenamiento</label><div>${escapeHTML(i.almacenamiento||'—')}</div></div>
+        <div class="detail-item"><label>Ubicación</label><div>${escapeHTML(i.ubicacion||'—')}</div></div>
+        <div class="detail-item"><label>Control de calidad</label><div>${qcLabel(i.controlCalidad)}</div></div>
+        <div class="detail-item"><label>Registro sanitario/INVIMA</label><div>${escapeHTML(i.registroSanitario||'—')}</div></div>
+        <div class="detail-item"><label>Proveedor</label><div>${escapeHTML(i.proveedor||'—')}</div></div>
+        <div class="detail-item"><label>Contacto proveedor</label><div>${escapeHTML(i.proveedorContacto||'—')}</div></div>
+        <div class="detail-item"><label>Orden de compra</label><div>${escapeHTML(i.ordenCompra||'—')}</div></div>
+        <div class="detail-item"><label>Registrado por</label><div>${escapeHTML(i.registradoPor||'—')}</div></div>
+        <div class="detail-item full"><label>Ficha de seguridad (SDS/MSDS)</label><div>${sdsLink}</div></div>
+        ${!i.activo ? `<div class="detail-item full"><label>Motivo de baja</label><div>${escapeHTML(i.motivoBaja||'—')} (por ${escapeHTML(i.bajaPor||'—')})</div></div>` : ''}
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeModal()">Cerrar</button>
+        ${i.activo ? `<button class="btn" onclick="closeModal();openItemModal('${i.id}')">Editar</button>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- modal: movimiento ---------- */
+function openMovModal(itemId, tipo){
+  const item = items.find(i=>i.id===itemId);
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>${tipo === 'entrada' ? 'Registrar entrada' : 'Registrar salida'} — ${escapeHTML(item.nombre)}</h2>
+      <div class="helper" style="margin-bottom:10px;">Stock actual: ${item.stock} ${escapeHTML(item.unidad||'')}</div>
+      <div class="field"><label>Cantidad</label><input id="m-cantidad" type="number" min="1" value="1"></div>
+      <div class="field"><label>Responsable</label><input id="m-responsable" type="text" value="${escapeHTML(config.preparedByDefault||'')}"></div>
+      <div class="field"><label>Motivo (opcional)</label><input id="m-motivo" type="text" placeholder="Uso en corrida, recepción de pedido…"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn" onclick="saveMovForm('${itemId}','${tipo}')">Registrar</button>
+      </div>
+    </div>
+  </div>`;
+}
+function saveMovForm(itemId, tipo){
+  const cantidad = Number(document.getElementById('m-cantidad').value);
+  const responsable = document.getElementById('m-responsable').value.trim();
+  const motivo = document.getElementById('m-motivo').value.trim();
+  if(!cantidad || cantidad <= 0){ showToast('Ingresa una cantidad válida.'); return; }
+  if(!responsable){ showToast('El responsable es obligatorio.'); return; }
+  const idx = items.findIndex(i=>i.id===itemId);
+  if(idx === -1) return;
+  if(tipo === 'salida' && cantidad > items[idx].stock){
+    if(!confirm('La cantidad supera el stock actual. ¿Registrar de todas formas?')) return;
+  }
+  items[idx].stock += (tipo === 'entrada' ? cantidad : -cantidad);
+  if(items[idx].stock < 0) items[idx].stock = 0;
+  movs.push({id: uid(), itemId, tipo, cantidad, responsable, motivo, fecha: nowStamp()});
+  config.preparedByDefault = responsable;
+  saveConfig();
+  logAudit(responsable, tipo === 'entrada' ? 'Entrada' : 'Salida', items[idx].nombre, `${cantidad} ${items[idx].unidad||''} — ${motivo||'sin motivo'}`.trim());
+  saveItems();
+  saveMovs();
+  closeModal();
+  render();
+  showToast('Movimiento registrado.');
+}
+
+function closeModal(){ document.getElementById('modal-root').innerHTML = ''; }
+
+/* ---------- alertas: resumen de rojos ---------- */
+function redItems(){ return items.filter(i => i.activo && overallStatus(i) === 'red'); }
+function buildSummaryText(){
+  const reds = redItems();
+  if(reds.length === 0) return 'No hay insumos en estado urgente hoy.';
+  let txt = `Kardex de laboratorio — alerta de insumos urgentes (${todayISO()})\n\n`;
+  reds.forEach(i=>{
+    const reasons = [];
+    if(expiryStatus(i.vencimiento) === 'red') reasons.push(i.vencimiento ? `vence ${i.vencimiento}` : 'sin fecha de vencimiento');
+    if(stockStatus(i.stock, i.stockMin) === 'red') reasons.push(`stock ${i.stock}/${i.stockMin} ${i.unidad||''}`.trim());
+    txt += `• ${i.nombre} (${i.categoria||'sin categoría'}) — ${reasons.join(', ')}\n`;
+  });
+  return txt;
+}
+function copySummary(){
+  const txt = buildSummaryText();
+  navigator.clipboard.writeText(txt).then(()=>{ showToast('Resumen copiado. Pégalo donde lo necesites.'); })
+    .catch(()=>{ showToast('No se pudo copiar automáticamente. Selecciona el texto manualmente.'); });
+}
+function emailSummary(){
+  const txt = buildSummaryText();
+  const subject = encodeURIComponent(`Kardex de laboratorio: ${redItems().length} insumo(s) urgentes`);
+  const body = encodeURIComponent(txt);
+  window.location.href = `mailto:?subject=${subject}&body=${body}`;
+}
+
+/* ---------- exportar a Excel ---------- */
+function exportToExcel(){
+  if(typeof XLSX === 'undefined'){ showToast('No se pudo cargar el módulo de Excel. Verifica tu conexión.'); return; }
+  const insumosRows = items.map(i => ({
+    'Nombre': i.nombre, 'Categoría': i.categoria, 'Código interno': i.codigoInterno, 'Lote proveedor': i.loteProveedor,
+    'Stock actual': i.stock, 'Stock mínimo': i.stockMin, 'Unidad': i.unidad,
+    'Fecha recepción': i.fechaRecepcion, 'Vencimiento': i.vencimiento, 'Fecha apertura': i.fechaApertura,
+    'Almacenamiento': i.almacenamiento, 'Ubicación': i.ubicacion, 'SDS/MSDS': i.sds,
+    'Control de calidad': i.controlCalidad, 'Registro sanitario/INVIMA': i.registroSanitario,
+    'Proveedor': i.proveedor, 'Contacto proveedor': i.proveedorContacto, 'Orden de compra': i.ordenCompra,
+    'Registrado por': i.registradoPor, 'Estado': i.activo ? overallStatus(i).toUpperCase() : 'DADO DE BAJA',
+    'Fecha de baja': i.fechaBaja || '', 'Motivo de baja': i.motivoBaja || '',
+  }));
+  const movsRows = movs.map(m=>{
+    const item = items.find(i=>i.id===m.itemId);
+    return { 'Fecha': m.fecha, 'Insumo': item ? item.nombre : '(eliminado)', 'Tipo': m.tipo, 'Cantidad': m.cantidad, 'Responsable': m.responsable, 'Motivo': m.motivo };
+  });
+  const auditRows = audit.map(a => ({ 'Fecha': a.fecha, 'Usuario': a.usuario, 'Acción': a.accion, 'Insumo': a.itemNombre, 'Detalle': a.detalle }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(insumosRows), 'Insumos');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(movsRows), 'Movimientos');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(auditRows), 'Trazabilidad');
+  XLSX.writeFile(wb, `kardex-laboratorio-${todayISO()}.xlsx`);
+  showToast('Excel exportado.');
+}
+
+/* ---------- informe de auditoría (imprimible / PDF) ---------- */
+function openReportModal(){
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+  <div class="overlay" id="overlay">
+    <div class="modal">
+      <h2>Generar informe de auditoría</h2>
+      <div class="sub">Se abrirá una vista lista para imprimir o guardar como PDF.</div>
+      <div class="field"><label>Nombre del laboratorio</label><input id="r-lab" type="text" value="${escapeHTML(config.labName||'')}"></div>
+      <div class="field"><label>Elaborado por</label><input id="r-prep" type="text" value="${escapeHTML(config.preparedByDefault||'')}"></div>
+      <div class="field row">
+        <div><label>Movimientos desde</label><input id="r-desde" type="date"></div>
+        <div><label>Movimientos hasta</label><input id="r-hasta" type="date" value="${todayISO()}"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" onclick="closeModal()">Cancelar</button>
+        <button class="btn" onclick="generateReport()">Generar</button>
+      </div>
+    </div>
+  </div>`;
+}
+function generateReport(){
+  const labName = document.getElementById('r-lab').value.trim() || '(Nombre del laboratorio no especificado)';
+  const preparedBy = document.getElementById('r-prep').value.trim() || '(No especificado)';
+  const desde = document.getElementById('r-desde').value;
+  const hasta = document.getElementById('r-hasta').value;
+  config.labName = labName; config.preparedByDefault = preparedBy; saveConfig();
+
+  const activeItems = items.filter(i=>i.activo);
+  const inactiveItems = items.filter(i=>!i.activo);
+  const counts = {red:0, amber:0, green:0};
+  activeItems.forEach(i => counts[overallStatus(i)]++);
+
+  const movsInRange = movs.filter(m => (!desde || m.fecha >= desde) && (!hasta || m.fecha <= hasta + ' 23:59'))
+    .sort((a,b)=> a.fecha.localeCompare(b.fecha));
+
+  const insumoRow = i => `<tr>
+    <td>${escapeHTML(i.nombre)}</td><td>${escapeHTML(i.categoria||'—')}</td><td>${escapeHTML(i.codigoInterno||'—')}</td>
+    <td>${escapeHTML(i.loteProveedor||'—')}</td><td>${i.fechaRecepcion||'—'}</td><td>${i.vencimiento||'—'}</td>
+    <td>${i.stock}/${i.stockMin} ${escapeHTML(i.unidad||'')}</td><td>${escapeHTML(i.ubicacion||'—')}</td>
+    <td>${escapeHTML(i.controlCalidad||'pendiente')}</td><td>${escapeHTML(i.registroSanitario||'—')}</td>
+    <td>${i.activo ? overallStatus(i).toUpperCase() : 'BAJA ('+escapeHTML(i.fechaBaja||'')+')'}</td>
+  </tr>`;
+
+  const movRow = m => { const it = items.find(x=>x.id===m.itemId);
+    return `<tr><td>${m.fecha}</td><td>${escapeHTML(it?it.nombre:'(eliminado)')}</td><td>${m.tipo}</td><td>${m.cantidad}</td><td>${escapeHTML(m.responsable)}</td><td>${escapeHTML(m.motivo||'')}</td></tr>`; };
+
+  const auditRow = a => `<tr><td>${a.fecha}</td><td>${escapeHTML(a.usuario)}</td><td>${escapeHTML(a.accion)}</td><td>${escapeHTML(a.itemNombre)}</td><td>${escapeHTML(a.detalle)}</td></tr>`;
+
+  const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Informe de auditoría — ${escapeHTML(labName)}</title>
+  <style>
+    body{font-family:'IBM Plex Sans',Arial,sans-serif;color:#1B2B2B;margin:0;padding:32px;font-size:12.5px;}
+    h1{font-size:20px;margin:0 0 2px;}
+    h2{font-size:14px;margin:26px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px;}
+    .meta{color:#5B6B69;font-size:11.5px;margin-bottom:18px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:6px;}
+    th,td{border:1px solid #D8DEDC;padding:5px 7px;text-align:left;font-size:11px;}
+    th{background:#EFF2F1;}
+    .summary{display:flex;gap:16px;margin:10px 0 6px;}
+    .summary div{border:1px solid #D8DEDC;border-radius:6px;padding:8px 14px;}
+    .sign{display:flex;gap:60px;margin-top:50px;}
+    .sign div{flex:1;border-top:1px solid #1B2B2B;padding-top:6px;font-size:11px;color:#5B6B69;}
+    @media print{ body{padding:14mm;} }
+  </style></head><body>
+    <h1>Informe de auditoría de insumos y reactivos</h1>
+    <div class="meta">${escapeHTML(labName)} · Generado el ${todayISO()} · Elaborado por ${escapeHTML(preparedBy)}</div>
+
+    <h2>Resumen de estado (insumos activos)</h2>
+    <div class="summary">
+      <div>🟢 En orden: <b>${counts.green}</b></div>
+      <div>🟡 Atención: <b>${counts.amber}</b></div>
+      <div>🔴 Urgente: <b>${counts.red}</b></div>
+      <div>Total activos: <b>${activeItems.length}</b></div>
+      <div>Dados de baja: <b>${inactiveItems.length}</b></div>
+    </div>
+
+    <h2>Inventario de insumos y reactivos</h2>
+    <table><thead><tr><th>Nombre</th><th>Categoría</th><th>Código interno</th><th>Lote proveedor</th><th>Recepción</th><th>Vencimiento</th><th>Stock/mín</th><th>Ubicación</th><th>CC</th><th>Reg. sanitario</th><th>Estado</th></tr></thead>
+    <tbody>${items.map(insumoRow).join('') || '<tr><td colspan="11">Sin insumos registrados.</td></tr>'}</tbody></table>
+
+    <h2>Historial de movimientos ${desde||hasta ? '('+(desde||'inicio')+' a '+(hasta||'hoy')+')' : ''}</h2>
+    <table><thead><tr><th>Fecha</th><th>Insumo</th><th>Tipo</th><th>Cantidad</th><th>Responsable</th><th>Motivo</th></tr></thead>
+    <tbody>${movsInRange.map(movRow).join('') || '<tr><td colspan="6">Sin movimientos en el periodo.</td></tr>'}</tbody></table>
+
+    <h2>Log de trazabilidad (creación, edición, bajas)</h2>
+    <table><thead><tr><th>Fecha</th><th>Usuario</th><th>Acción</th><th>Insumo</th><th>Detalle</th></tr></thead>
+    <tbody>${[...audit].sort((a,b)=>a.fecha.localeCompare(b.fecha)).map(auditRow).join('') || '<tr><td colspan="5">Sin eventos registrados.</td></tr>'}</tbody></table>
+
+    <div class="sign">
+      <div>Elaborado por: ${escapeHTML(preparedBy)}</div>
+      <div>Revisado por:</div>
+      <div>Fecha:</div>
+    </div>
+  </body></html>`;
+
+  const win = window.open('', '_blank');
+  if(!win){ showToast('El navegador bloqueó la ventana emergente. Habilítala para generar el informe.'); return; }
+  win.document.open(); win.document.write(html); win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+  closeModal();
+  logAudit(preparedBy, 'Informe', '(general)', `Informe de auditoría generado (movimientos ${desde||'inicio'} a ${hasta||'hoy'})`);
+}
+
+document.getElementById('btn-new').addEventListener('click', ()=>openItemModal(null));
+document.getElementById('btn-refresh').addEventListener('click', loadData);
+document.getElementById('btn-export').addEventListener('click', exportToExcel);
+document.getElementById('btn-report').addEventListener('click', openReportModal);
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('filter-cat').addEventListener('change', render);
+document.getElementById('filter-status').addEventListener('change', render);
+document.getElementById('filter-inactive').addEventListener('change', render);
+
+loadData();
+</script>
+</body>
+</html>
