@@ -154,6 +154,9 @@ tbody tr.inactive{opacity:.55;}
     <label class="check-label"><input type="checkbox" id="filter-inactive"> Mostrar dados de baja</label>
     <button class="btn secondary" id="btn-report">📋 Informe de auditoría</button>
     <button class="btn secondary" id="btn-export">⬇ Excel</button>
+    <button class="btn secondary" id="btn-backup" title="Descargar copia de seguridad en tu computador">💾 Copia de seguridad</button>
+    <button class="btn secondary" id="btn-restore" title="Restaurar desde un archivo de copia de seguridad">📂 Restaurar</button>
+    <input type="file" id="restore-file" accept="application/json" style="display:none;">
     <button class="btn secondary" id="btn-refresh" title="Recargar datos compartidos">↻</button>
     <button class="btn" id="btn-new">+ Nuevo insumo</button>
   </div>
@@ -474,8 +477,16 @@ function saveItemForm(id){
     items[idx] = {...items[idx], ...data};
     logAudit(regPor, 'Edición', nombre, 'Datos del insumo actualizados');
   } else {
-    items.push({id: uid(), ...data});
+    const newItem = {id: uid(), ...data};
+    items.push(newItem);
     logAudit(regPor, 'Creación', nombre, 'Insumo registrado en el kardex');
+    if(newItem.stock > 0){
+      movs.push({
+        id: uid(), itemId: newItem.id, tipo: 'entrada', cantidad: newItem.stock,
+        responsable: regPor, motivo: 'Carga inicial de inventario', fecha: nowStamp(),
+      });
+      saveMovs();
+    }
   }
   saveItems();
   closeModal();
@@ -756,10 +767,65 @@ function generateReport(){
   logAudit(preparedBy, 'Informe', '(general)', `Informe de auditoría generado (movimientos ${desde||'inicio'} a ${hasta||'hoy'})`);
 }
 
+/* ---------- copia de seguridad en archivo local (.json) ---------- */
+function downloadBackup(){
+  const snapshot = {
+    tipo: 'kardex-laboratorio-backup',
+    version: 1,
+    generadoEl: nowStamp(),
+    items, movs, audit, config,
+  };
+  const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `kardex-backup-${todayISO()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Copia de seguridad descargada en tu computador.');
+}
+
+function triggerRestore(){
+  document.getElementById('restore-file').click();
+}
+function handleRestoreFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async () => {
+    let data;
+    try{ data = JSON.parse(reader.result); }
+    catch(err){ showToast('El archivo no es una copia de seguridad válida.'); return; }
+    if(!data || data.tipo !== 'kardex-laboratorio-backup'){
+      showToast('El archivo no parece ser una copia de seguridad de este kardex.'); return;
+    }
+    const resumen = `Esto reemplazará TODOS los datos actuales (compartidos con tu equipo) por los del archivo:\n\n` +
+      `• ${data.items?.length||0} insumos\n• ${data.movs?.length||0} movimientos\n• ${data.audit?.length||0} eventos de trazabilidad\n\n` +
+      `Generado el: ${data.generadoEl||'(desconocido)'}\n\n¿Continuar?`;
+    if(!confirm(resumen)) { e.target.value = ''; return; }
+    items = data.items || [];
+    movs = data.movs || [];
+    audit = data.audit || [];
+    config = data.config || config;
+    items.forEach(i => { if(i.activo === undefined) i.activo = true; });
+    await saveItems(); await saveMovs(); await saveAudit(); await saveConfig();
+    logAudit(config.preparedByDefault, 'Restauración', '(general)', `Datos restaurados desde copia de seguridad del ${data.generadoEl||'archivo'}`);
+    render();
+    showToast('Datos restaurados desde el archivo.');
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+}
+
 document.getElementById('btn-new').addEventListener('click', ()=>openItemModal(null));
 document.getElementById('btn-refresh').addEventListener('click', loadData);
 document.getElementById('btn-export').addEventListener('click', exportToExcel);
 document.getElementById('btn-report').addEventListener('click', openReportModal);
+document.getElementById('btn-backup').addEventListener('click', downloadBackup);
+document.getElementById('btn-restore').addEventListener('click', triggerRestore);
+document.getElementById('restore-file').addEventListener('change', handleRestoreFile);
 document.getElementById('search').addEventListener('input', render);
 document.getElementById('filter-cat').addEventListener('change', render);
 document.getElementById('filter-status').addEventListener('change', render);
